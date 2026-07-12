@@ -11,11 +11,13 @@ Session 1 graph:
     START --> respond --> END
 """
 from langgraph.graph import END, StateGraph
-
 from .nodes import respond
 from .state import WealthDeskState
-
-
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
+import sqlite3
+from uuid import uuid4
+from .config import CHECKPOINT_DB
 # ---------------------------------------------------------------------------
 # TODO 5 of 5 -- build_graph
 # ---------------------------------------------------------------------------
@@ -38,16 +40,15 @@ from .state import WealthDeskState
 #
 # ---------------------------------------------------------------------------
 
-def build_graph():
-    """Build and compile the WealthDesk LangGraph graph."""
+def build_graph(checkpointer = None):
+    # START -> respond -> STOP
     builder = StateGraph(WealthDeskState)
     builder.add_node("respond", respond)
-    builder.set_entry_point("respond")
-    builder.add_edge("respond",END)
-    return builder.compile()
-   # raise NotImplementedError("TODO 5: implement build_graph() in wealthdesk/agent.py")
-
-
+    builder.set_entry_point("respond") # START
+    builder.add_edge("respond", END)
+    if checkpointer is None:
+        checkpointer = MemorySaver()
+    return builder.compile(checkpointer=checkpointer)
 # Module-level graph instance required by langgraph.json for LangGraph Studio.
 # run() uses this directly rather than building a second copy.
 graph = build_graph()
@@ -58,6 +59,10 @@ graph = build_graph()
 # ---------------------------------------------------------------------------
 
 def run() -> None:
+    conn = sqlite3.connect(str(CHECKPOINT_DB), check_same_thread=False)
+    _graph    = build_graph(checkpointer=SqliteSaver(conn))  # terminal app opts into disk persistence explicit
+    thread_id = str(uuid4())
+    config    = {"configurable": {"thread_id": thread_id}}
     print("=" * 55)
     print("  WealthDesk | Bharat National Bank")
     print("  Type 'quit' to exit")
@@ -78,8 +83,9 @@ def run() -> None:
 
         # "response": "" is a placeholder to satisfy the TypedDict contract.
         # respond() overwrites it; graph.invoke() returns the full merged state.
-        result = graph.invoke({"customer_message": user_input, "response": ""})
-        print(f"\nWealthDesk: {result['response']}")
+            result = _graph.invoke({"customer_message": user_input, "response": ""},config=config)
+            
+            print(f"\nWealthDesk: {result['response']}")
 
 
 if __name__ == "__main__":

@@ -4,7 +4,9 @@ wealthdesk/config.py
 All constants and prompts for WealthDesk.
 Nothing here makes API calls -- it's pure configuration.
 """
-
+from pathlib import Path
+ 
+ 
 # ---------------------------------------------------------------------------
 # Model settings (provided -- no changes needed)
 # ---------------------------------------------------------------------------
@@ -74,3 +76,5 @@ Output format:
   Keep all responses under 150 words.
   Sign off as: WealthDesk | Bharat National Bank
 """
+DATA_DIR      = Path(__file__).parent.parent.parent.parent / "data"
+CHECKPOINT_DB = DATA_DIR / "checkpoints.db"
