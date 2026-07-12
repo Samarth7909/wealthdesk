@@ -10,14 +10,19 @@ Run the agent from the repo root:
 Session 1 graph:
     START --> respond --> END
 """
+import sqlite3
+from pathlib import Path
+from uuid import uuid4
+
 from langgraph.graph import END, StateGraph
-from .nodes import respond
-from .state import WealthDeskState
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.sqlite import SqliteSaver
-import sqlite3
-from uuid import uuid4
-from .config import CHECKPOINT_DB
+
+from .nodes import respond
+from .state import WealthDeskState
+
+CHECKPOINT_DB = Path(__file__).parent.parent.parent.parent / "data" / "checkpoints.db"
+CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
 # ---------------------------------------------------------------------------
 # TODO 5 of 5 -- build_graph
 # ---------------------------------------------------------------------------
@@ -40,15 +45,12 @@ from .config import CHECKPOINT_DB
 #
 # ---------------------------------------------------------------------------
 
-def build_graph(checkpointer = None):
-    # START -> respond -> STOP
+def build_graph(checkpointer=None):
     builder = StateGraph(WealthDeskState)
     builder.add_node("respond", respond)
-    builder.set_entry_point("respond") # START
+    builder.set_entry_point("respond")
     builder.add_edge("respond", END)
-    if checkpointer is None:
-        checkpointer = MemorySaver()
-    return builder.compile(checkpointer=checkpointer)
+    return builder.compile(checkpointer=checkpointer or MemorySaver())
 # Module-level graph instance required by langgraph.json for LangGraph Studio.
 # run() uses this directly rather than building a second copy.
 graph = build_graph()
@@ -59,8 +61,8 @@ graph = build_graph()
 # ---------------------------------------------------------------------------
 
 def run() -> None:
-    conn = sqlite3.connect(str(CHECKPOINT_DB), check_same_thread=False)
-    _graph    = build_graph(checkpointer=SqliteSaver(conn))  # terminal app opts into disk persistence explicit
+    conn      = sqlite3.connect(str(CHECKPOINT_DB), check_same_thread=False)
+    _graph    = build_graph(checkpointer=SqliteSaver(conn))
     thread_id = str(uuid4())
     config    = {"configurable": {"thread_id": thread_id}}
     print("=" * 55)
@@ -81,11 +83,8 @@ def run() -> None:
             print("\nWealthDesk: Thank you for choosing Bharat National Bank. Goodbye!")
             break
 
-        # "response": "" is a placeholder to satisfy the TypedDict contract.
-        # respond() overwrites it; graph.invoke() returns the full merged state.
-            result = _graph.invoke({"customer_message": user_input, "response": ""},config=config)
-            
-            print(f"\nWealthDesk: {result['response']}")
+        result = _graph.invoke({"customer_message": user_input, "response": ""}, config=config)
+        print(f"\nWealthDesk: {result['response']}")
 
 
 if __name__ == "__main__":

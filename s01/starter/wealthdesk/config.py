@@ -46,7 +46,6 @@ MAX_TOKENS  = 300
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """
-TODO: Write the WealthDesk system prompt here.
 You are WealthDesk, the AI banking assistant at Bharat National Bank (BNB).
  
 Your role is to help customers with questions about BNB's loan products, fixed deposits,
@@ -76,5 +75,4 @@ Output format:
   Keep all responses under 150 words.
   Sign off as: WealthDesk | Bharat National Bank
 """
-DATA_DIR      = Path(__file__).parent.parent.parent.parent / "data"
-CHECKPOINT_DB = DATA_DIR / "checkpoints.db"
+
