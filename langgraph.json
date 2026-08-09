@@ -1,7 +1,7 @@
 {
-  "dependencies": ["./s12/solution"],
+  "dependencies": ["./s08/starter"],
   "graphs": {
-    "wealthdesk": "./s12/solution/wealthdesk/agent.py:graph"
+    "wealthdesk": "./s08/starter/wealthdesk/agent.py:graph"
   },
   "env": ".env"
 }

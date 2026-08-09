@@ -1,21 +1,28 @@
 # Secrets -- never commit
 .env
 
+# Participant resources -- shared separately, not tracked in repo
+resources/
+
 # Instructor-only files -- released before each session
 # To release a session: git rm -r --cached s0X/ && git add -f s0X/ && git commit
 s*/solution/
 s*/instructor_notes.md
 s*/instructor_notes_*.md
 s*/CLAUDE_CODE_PROMPTS.md
+s*/CLAUDE_CODE_PROMPTS_*.md
 s*/presentation_*.md
+s*/*_slides.md
+s*/*_slides_*.md
+s*/*_DeepDive_*.md
+s*/*_check.md
+s*/*_review_*.md
+s*/*.pptx
+s*/*.html
+s*/*.pdf
+s*/instructor_demo/
 prds/
-s03/
-s04/
-s05/
-s06/
-s07/
-s08/
-s09/
+_pre_mcp_adapters_backup_*/
 s10/
 s11/
 s12/
@@ -23,6 +30,8 @@ s12/
 # Generated files -- recreate with seed.py and ingest.py
 data/bnb_data.db
 data/checkpoints.db
+data/checkpoints.db-shm
+data/checkpoints.db-wal
 data/vectorstore/
 
 # Python bytecode
@@ -35,6 +44,9 @@ __pycache__/
 .coverage
 htmlcov/
 
+# LangGraph Studio local server cache
+.langgraph_api/
+
 # Editor
 .vscode/settings.json
 .idea/
@@ -46,3 +58,5 @@ Thumbs.db
 data/checkpoints.db 
 data/checkpoints.db-shm
 data/checkpoints.db-wal
+
+.mcp.json

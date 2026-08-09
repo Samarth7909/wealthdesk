@@ -15,6 +15,15 @@ from .state import WealthDeskState
 from .tools import llm
 
 
+BLOCKLIST = [
+    "ignore all previous",
+    "forget everything",
+    "you are now",
+    "disregard your system",
+    "act as",
+    "jailbreak",
+]
+
 def respond(state: WealthDeskState) -> dict:
     """Call the LLM and return the agent's reply."""
     messages = [SystemMessage(content=SYSTEM_PROMPT)]
