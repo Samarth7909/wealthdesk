@@ -73,8 +73,29 @@ def query_rates(product_type: str = "all") -> str:
 
     Returns formatted rate information as a plain-text string.
     """
-    # TODO: implement this tool
-    pass
+    conn  = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+    lines = []
+    try:
+        if product_type in ("loan", "all"):
+            rows = conn.execute(
+                "SELECT name, interest_rate, tenure_min_years, tenure_max_years "
+                "FROM loan_products ORDER BY interest_rate"
+            ).fetchall()
+            for name, rate, min_y, max_y in rows:
+                lines.append(f"{name}: {rate:.1f}% p.a., tenure {min_y}-{max_y} years")
+        if product_type in ("fd", "all"):
+            rows = conn.execute(
+                "SELECT tenure_label, interest_rate, senior_rate "
+                "FROM fd_products ORDER BY tenure_months"
+            ).fetchall()
+            for label, rate, senior in rows:
+                lines.append(
+                    f"FD {label}: {rate:.1f}% p.a. "
+                    f"(senior citizens: {rate + senior:.1f}%, extra +{senior:.1f}%)"
+                )
+    finally:
+        conn.close()
+    return "\n".join(lines) if lines else "No rate data found."
 
 
 # ---------------------------------------------------------------------------
@@ -117,8 +138,33 @@ def query_branch(city: str = "all") -> str:
 
     Returns branch names, addresses, IFSC codes, and phone numbers.
     """
-    # TODO: implement this tool
-    pass
+    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+    try:
+        if city.lower() == "all":
+            rows = conn.execute(
+                "SELECT name, city, address, ifsc, phone FROM branches ORDER BY city, name"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT name, city, address, ifsc, phone "
+                "FROM branches WHERE city LIKE ? ORDER BY name",
+                (f"%{city}%",),
+            ).fetchall()
+            if not rows:
+                rows = conn.execute(
+                    "SELECT name, city, address, ifsc, phone "
+                    "FROM branches WHERE name LIKE ? ORDER BY name",
+                    (f"%{city}%",),
+                ).fetchall()
+    finally:
+        conn.close()
+    if not rows:
+        return f"No BNB branches found for city: '{city}'."
+    parts = [
+        f"{name} ({city_})\n  Address: {address}\n  IFSC: {ifsc}  |  Phone: {phone}"
+        for name, city_, address, ifsc, phone in rows
+    ]
+    return "\n\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +180,7 @@ def query_branch(city: str = "all") -> str:
 # llm_with_tools is used for the FIRST call in respond(). The second call
 # (after tools have run) uses plain llm.
 # ---------------------------------------------------------------------------
-# TODO: add llm_with_tools = llm.bind_tools([query_rates, query_branch])
+llm_with_tools = llm.bind_tools([query_rates, query_branch])
 
 
 def _run_tool(tool_name: str, tool_args: dict) -> str:

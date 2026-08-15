@@ -38,7 +38,15 @@ from .state import WealthDeskState
 # ---------------------------------------------------------------------------
 # TODO: uncomment the function above, then delete these two placeholder lines
 def build_graph(checkpointer=None):
-    raise NotImplementedError("TODO 4: implement build_graph()")
+    builder = StateGraph(WealthDeskState)
+    builder.add_node("respond", respond)
+    builder.set_entry_point("respond")
+    builder.add_edge("respond", END)
+
+    if checkpointer is None:
+        checkpointer = MemorySaver()
+
+    return builder.compile(checkpointer=checkpointer)
 
 
 graph = build_graph()

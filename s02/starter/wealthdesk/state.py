@@ -27,4 +27,4 @@ class WealthDeskState(TypedDict):
     # then append the new turn before returning it.
     #
     # -----------------------------------------------------------------------
-    # TODO: add  history: list[dict]
+    history: list[dict]

@@ -58,11 +58,20 @@ def classify(state: WealthDeskState) -> dict:
     # 3. Return {"query_type": query_type}
     #    (This node only returns query_type; other fields are unchanged.)
     # -----------------------------------------------------------------------
-    # TODO: implement this node
-    pass
+    messages = [
+        SystemMessage(content=CLASSIFY_SYSTEM),
+        HumanMessage(content=msg),
+    ]
+    try:
+        result = classifier_llm.invoke(messages)
+        query_type = result.content.strip().upper()
+        if query_type not in {"SIMPLE", "COMPLEX", "OUT_OF_SCOPE"}:
+            query_type = "SIMPLE"
+    except Exception as e:
+        print(f"[WealthDesk] Classification error: {e}")
+        query_type = "SIMPLE"
 
-
-def respond(state: WealthDeskState) -> dict:
+    return {"query_type": query_type}
     """Handle SIMPLE queries. Provided -- no changes needed."""
     history  = state.get("history", [])
     messages = [SystemMessage(content=SYSTEM_PROMPT)]
@@ -121,5 +130,9 @@ def route_query(state: WealthDeskState) -> str:
     #
     # Use state.get("query_type", "SIMPLE") to read safely.
     # -----------------------------------------------------------------------
-    # TODO: implement this function
-    pass
+    qt = state.get("query_type", "SIMPLE")
+    if qt == "COMPLEX":
+        return "escalate"
+    if qt == "OUT_OF_SCOPE":
+        return "decline"
+    return "respond"

@@ -22,4 +22,4 @@ class WealthDeskState(TypedDict):
     # respond() reads it to add policy context to the system message.
     # Type hint: list[str]
     #
-    # TODO: add  retrieved_docs: list[str]
+    retrieved_docs: list[str]

@@ -46,7 +46,8 @@ def build_graph(checkpointer=None):
         "decline":       "decline",
     })
 
-    # TODO: add builder.add_edge("retrieve_docs", "respond") here
+    builder.add_node("retrieve_docs", retrieve_docs)
+    builder.add_edge("retrieve_docs", "respond")
     builder.add_edge("respond",       END)
     builder.add_edge("escalate",      END)
     builder.add_edge("decline",       END)

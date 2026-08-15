@@ -82,8 +82,19 @@ def retrieve_docs(state: WealthDeskState) -> dict:
     #
     # 4. Return {"retrieved_docs": retrieved}
     # -----------------------------------------------------------------------
-    # TODO: implement this node
-    return {"retrieved_docs": []}
+    _init_vectorstore()
+    if vectorstore is None:
+        return {"retrieved_docs": []}
+    try:
+        docs = vectorstore.similarity_search(state["customer_message"], k=RETRIEVAL_K)
+        retrieved = [
+            f"[{doc.metadata.get('source', 'unknown')}]\n{doc.page_content}"
+            for doc in docs
+        ]
+    except Exception as e:
+        print(f"[WealthDesk] Retrieval error: {e}")
+        retrieved = []
+    return {"retrieved_docs": retrieved}
 
 
 def respond(state: WealthDeskState) -> dict:
@@ -109,8 +120,18 @@ def respond(state: WealthDeskState) -> dict:
     #
     # Then replace SYSTEM_PROMPT with system_content in the line below.
     # -----------------------------------------------------------------------
-    # TODO: replace SYSTEM_PROMPT with system_content (built from retrieved)
-    messages = [SystemMessage(content=SYSTEM_PROMPT)]
+    if retrieved:
+        context_block  = "\n\n---\n\n".join(retrieved)
+        system_content = (
+            SYSTEM_PROMPT
+            + "\n\nThe following sections from BNB's policy documents are relevant "
+              "to the customer's question. Use this information in your answer:\n\n"
+            + context_block
+        )
+    else:
+        system_content = SYSTEM_PROMPT
+
+    messages = [SystemMessage(content=system_content)]
     for turn in history:
         if turn["role"] == "user":
             messages.append(HumanMessage(content=turn["content"]))
@@ -157,4 +178,4 @@ def route_query(state: WealthDeskState) -> str:
         return "escalate"
     if qt == "OUT_OF_SCOPE":
         return "decline"
-    return "respond"  # TODO 4: change "respond" to "retrieve_docs"
+    return "retrieve_docs"  # routes SIMPLE to retrieve_docs

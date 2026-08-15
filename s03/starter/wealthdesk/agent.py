@@ -58,7 +58,24 @@ from .state import WealthDeskState
 #      return builder.compile(checkpointer=checkpointer)
 # ---------------------------------------------------------------------------
 def build_graph(checkpointer=None):
-    raise NotImplementedError("TODO 4: implement build_graph()")
+    builder = StateGraph(WealthDeskState)
+    builder.add_node("classify", classify)
+    builder.add_node("respond",  respond)
+    builder.add_node("escalate", escalate)
+    builder.add_node("decline",  decline)
+
+    builder.set_entry_point("classify")
+    builder.add_conditional_edges("classify", route_query, {
+        "respond":  "respond",
+        "escalate": "escalate",
+        "decline":  "decline",
+    })
+
+    builder.add_edge("respond",  END)
+    builder.add_edge("escalate", END)
+    builder.add_edge("decline",  END)
+
+    return builder.compile(checkpointer=checkpointer)
 
 
 graph = build_graph()

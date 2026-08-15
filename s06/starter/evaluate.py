@@ -115,12 +115,16 @@ def load_dataset(path: Path) -> list[dict]:
 
     You do NOT need to handle FileNotFoundError -- let it propagate naturally.
     """
-    # TODO: implement this function
-    pass
-
-
-# ---------------------------------------------------------------------------
-# Judge output parsing
+    with open(path, encoding="utf-8") as f:
+        dataset = json.load(f)
+    for i, item in enumerate(dataset):
+        missing = REQUIRED_FIELDS - set(item.keys())
+        if missing:
+            raise ValueError(
+                f"Golden dataset item {i} (id={item.get('id', '?')}) "
+                f"is missing fields: {missing}"
+            )
+    return dataset
 # ---------------------------------------------------------------------------
 
 def parse_judge_response(output: str) -> tuple[int, str]:
@@ -144,12 +148,18 @@ def parse_judge_response(output: str) -> tuple[int, str]:
 
     Use line.split(":", 1)[1].strip() to handle colons in the text safely.
     """
-    # TODO: implement this function
-    pass
-
-
-# ---------------------------------------------------------------------------
-# Response evaluation
+    score  = 0
+    reason = "Could not parse judge output"
+    for line in output.strip().splitlines():
+        if line.upper().startswith("SCORE:"):
+            try:
+                raw    = int(line.split(":", 1)[1].strip())
+                score  = max(1, min(5, raw))
+            except ValueError:
+                pass
+        elif line.upper().startswith("REASON:"):
+            reason = line.split(":", 1)[1].strip()
+    return score, reason
 # ---------------------------------------------------------------------------
 
 def evaluate_response(item: dict, result: dict) -> dict:
@@ -183,12 +193,36 @@ def evaluate_response(item: dict, result: dict) -> dict:
          "id", "query", "category", "expected_route", "actual_route",
          "route_correct", "score", "reason", "forbidden_found", "passed", "response"
     """
-    # TODO: implement this function
-    pass
+    actual_route  = result.get("query_type", "UNKNOWN")
+    response      = result.get("response", "")
+    route_correct = (actual_route == item["expected_route"])
+    criteria      = item.get("criteria", [])
+    must_not      = item.get("must_not_contain", [])
 
+    criteria_met    = all(c.lower() in response.lower() for c in criteria)
+    forbidden_found = [f for f in must_not if f.lower() in response.lower()]
 
-# ---------------------------------------------------------------------------
-# Evaluation runner (provided -- no changes needed)
+    if item["expected_route"] in ("COMPLEX", "OUT_OF_SCOPE"):
+        score  = 5 if criteria_met else 1
+        reason = "Canned response criteria met." if criteria_met else "Canned response keyword missing."
+        passed = route_correct and criteria_met and not forbidden_found
+    else:
+        score, reason = llm_judge(item["query"], criteria, response)
+        passed = route_correct and score >= PASS_SCORE and not forbidden_found
+
+    return {
+        "id":            item["id"],
+        "query":         item["query"],
+        "category":      item["category"],
+        "expected_route": item["expected_route"],
+        "actual_route":  actual_route,
+        "route_correct": route_correct,
+        "score":         score,
+        "reason":        reason,
+        "forbidden_found": forbidden_found,
+        "passed":        passed,
+        "response":      response,
+    }
 # ---------------------------------------------------------------------------
 
 def run_evaluation(graph, dataset: list[dict]) -> list[dict]:
@@ -250,11 +284,40 @@ def generate_report(results: list[dict]) -> dict:
           "average_score": round(avg_score, 2),
           "by_category": by_category, "failures": failures}
     """
-    # TODO: implement this function
-    pass
+    total  = len(results)
+    passed = sum(1 for r in results if r["passed"])
+    failed = total - passed
 
+    simple_scores = [r["score"] for r in results
+                     if r["category"] not in ("complex", "oos") and r["score"] > 0]
+    avg_score = sum(simple_scores) / len(simple_scores) if simple_scores else 0.0
 
-def print_report(report: dict) -> None:
+    by_category: dict = {}
+    for r in results:
+        cat = r["category"]
+        if cat not in by_category:
+            by_category[cat] = {"total": 0, "passed": 0}
+        by_category[cat]["total"]  += 1
+        by_category[cat]["passed"] += 1 if r["passed"] else 0
+    for cat in by_category:
+        t = by_category[cat]["total"]
+        by_category[cat]["pass_rate"] = by_category[cat]["passed"] / t if t else 0.0
+
+    failures = [
+        {"id": r["id"], "query": r["query"], "reason": r["reason"],
+         "score": r["score"], "actual_route": r["actual_route"]}
+        for r in results if not r["passed"]
+    ]
+
+    return {
+        "total":         total,
+        "passed":        passed,
+        "failed":        failed,
+        "pass_rate":     passed / total if total else 0.0,
+        "average_score": round(avg_score, 2),
+        "by_category":   by_category,
+        "failures":      failures,
+    }
     """Print the evaluation report to stdout. (Provided -- no changes needed.)"""
     print("\n" + "=" * 60)
     print("  WealthDesk Baseline Evaluation Report")

@@ -149,20 +149,24 @@ def respond(state: WealthDeskState) -> dict:
         #
         # After the while-block: response_text = result.content or ""
         # -----------------------------------------------------------------------
-        # TODO: add the while result.tool_calls block here
+        if result.invalid_tool_calls:
+            for itc in result.invalid_tool_calls:
+                print(f"[WealthDesk] Invalid tool call ignored: {itc.get('name','unknown')} — {itc.get('error','parse error')}")
 
-        # We execute tools manually here because WealthDeskState uses a custom
-        # shape (history: list[dict]). In projects using LangGraph's standard
-        # MessagesState you'd use the built-in ToolNode instead:
-        #
-        #   from langgraph.prebuilt import ToolNode
-        #   builder.add_node("tools", ToolNode([query_rates, query_branch]))
-        #   builder.add_edge("respond", "tools")
-        #   builder.add_edge("tools", "respond")
-        #
-        # Both patterns are valid. ToolNode is less code; this gives more control.
+        max_tool_rounds = 5
+        tool_rounds     = 0
+        while result.tool_calls and tool_rounds < max_tool_rounds:
+            messages.append(result)
+            for tc in result.tool_calls:
+                tool_output = _run_tool(tc["name"], tc["args"])
+                print(f"[WealthDesk] Tool: {tc['name']}({tc['args']}) -> {str(tool_output)[:80]}")
+                messages.append(
+                    ToolMessage(content=str(tool_output), tool_call_id=tc["id"])
+                )
+            tool_rounds += 1
+            result = llm_with_tools.invoke(messages)
 
-        response_text = result.content
+        response_text = result.content or ""
 
     except Exception as e:
         print(f"[WealthDesk] LLM error: {e}")

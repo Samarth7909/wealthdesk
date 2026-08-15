@@ -21,4 +21,4 @@ class WealthDeskState(TypedDict):
     # Type hint: str
     # Valid values: "SIMPLE", "COMPLEX", "OUT_OF_SCOPE"
     #
-    # TODO: add  query_type: str
+    query_type: str
