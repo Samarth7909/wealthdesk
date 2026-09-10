@@ -1,6 +1,7 @@
 import re
 import sqlite3
 import unicodedata
+
 from langchain_chroma import Chroma
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -30,6 +31,18 @@ from .state import WealthDeskState
 from .tools import _run_tool, classifier_llm, llamaguard_llm, llm, llm_with_tools
 
 vectorstore = None
+# Pre-compile guard patterns once at module load — avoids re-compilation overhead
+# on every request in high-concurrency deployments.
+_pii_compiled       = [re.compile(p)              for p in PII_PATTERNS]
+_injection_compiled = [re.compile(p, re.IGNORECASE) for p in INJECTION_PATTERNS]
+
+# OWASP LLM01:2026 mitigation #5 — strip invisible Unicode used to smuggle
+# injection payloads invisibly: tag-block (U+E0000–E007F), variation-selector
+# (U+FE00–FE0F), and zero-width characters (U+200B/C/D, U+2060).
+# Applied before NFKD normalization in the guard.
+_INVISIBLE_UNICODE_RE = re.compile(
+    "[\U000E0000-\U000E007F︀-️​‌‍⁠]"
+)
 
 
 def _init_vectorstore() -> None:
@@ -62,7 +75,16 @@ def _llamaguard_safe(message: str) -> bool:
       - Wrap in try/except; on any error print a warning and return True (fail-open)
       - Print: f"[WealthDesk] LlamaPromptGuard: score={score:.4f}"
     """
-    raise NotImplementedError("TODO: implement _llamaguard_safe()")
+    try:
+        result = llamaguard_llm.invoke([HumanMessage(content=message)])
+        score  = float(result.content.strip())
+        safe   = score < LLAMAGUARD_THRESHOLD
+        print(f"[WealthDesk] LlamaPromptGuard: score={score:.4f} → {'safe' if safe else 'INJECTION'}")
+        return safe, score
+    except Exception as e:
+        print(f"[WealthDesk] LlamaPromptGuard unavailable — defaulting to safe: {e}")
+        return True, -1.0
+
 
 
 @traceable(name="input_guard")
@@ -83,7 +105,36 @@ def guard(state: WealthDeskState) -> dict:
       Unicode (tag-block, variation-selectors, zero-width) before NFKD.
     Print a short log line when something is blocked.
     """
-    raise NotImplementedError("TODO: implement guard()")
+    raw = state["customer_message"]
+
+    # OWASP LLM01:2026 mitigations applied in order:
+    #   1. Strip invisible Unicode (tag-block, variation-selector, zero-width)
+    #      that can smuggle injections invisibly (mitigation #5).
+    #   2. NFKD normalization collapses compatibility characters (full-width
+    #      digits, mathematical bold) before regex matching.
+    # Neither step catches Cyrillic homoglyphs — Layer 2 handles many of those.
+    msg = unicodedata.normalize("NFKD", _INVISIBLE_UNICODE_RE.sub("", raw))
+
+    # Layer 1a: PII — identifier must not reach the LLM.
+    # PAN is uppercase only; no IGNORECASE (lowercase is not a valid PAN card format).
+    for rx in _pii_compiled:
+        if rx.search(msg):
+            print("[WealthDesk] Guard: PII detected — blocked")
+            return {"blocked_reason": "pii", "llamaguard_score": -1.0}
+
+    # Layer 1b: Injection / jailbreak / persona-hijack — always case-insensitive.
+    for rx in _injection_compiled:
+        if rx.search(msg):
+            print("[WealthDesk] Guard: injection (regex) detected — blocked")
+            return {"blocked_reason": "injection", "llamaguard_score": -1.0}
+
+    # Layer 2: Llama Prompt Guard 2 — semantic injection detection.
+    safe, score = _llamaguard_safe(msg)
+    if not safe:
+        print("[WealthDesk] Guard: jailbreak (LlamaPromptGuard) detected — blocked")
+        return {"blocked_reason": "llamaguard", "llamaguard_score": score}
+
+    return {"blocked_reason": "", "llamaguard_score": score}
 
 
 def blocked(state: WealthDeskState) -> dict:
@@ -95,7 +146,22 @@ def blocked(state: WealthDeskState) -> dict:
       - Otherwise (injection),             set response = GUARD_BLOCKED_RESPONSE.
       - Return response, specialist="guard", and updated history.
     """
-    raise NotImplementedError("TODO: implement blocked()")
+    reason = state.get("blocked_reason", "injection")
+    if reason == "pii":
+        response = GUARD_PII_RESPONSE
+    elif reason == "llamaguard":
+        response = GUARD_UNSAFE_RESPONSE
+    else:
+        response = GUARD_BLOCKED_RESPONSE
+    return {
+        "response":  response,
+        "specialist": "guard",
+        "history": state.get("history", []) + [
+            {"role": "user",      "content": state["customer_message"]},
+            {"role": "assistant", "content": response},
+        ],
+    }
+
 
 
 def route_guard(state: WealthDeskState) -> str:
@@ -103,7 +169,7 @@ def route_guard(state: WealthDeskState) -> str:
 
     TODO: check state["blocked_reason"] and return the correct string.
     """
-    raise NotImplementedError("TODO: implement route_guard()")
+    return "blocked" if state.get("blocked_reason") else "classify"
 
 
 # ---------------------------------------------------------------------------

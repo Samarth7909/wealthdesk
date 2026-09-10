@@ -14,7 +14,7 @@ if not GROQ_API_KEY:
 # If one hits Groq rate limits mid-session, comment it out and uncomment the other.
 MODEL_NAME            = "openai/gpt-oss-120b"  # primary: higher daily token limit
 # MODEL_NAME          = "openai/gpt-oss-20b"   # fallback: 200k tokens/day ceiling
-CLASSIFIER_MODEL      = "groq/compound-mini"
+CLASSIFIER_MODEL      = "openai/gpt-oss-20b"
 CLASSIFIER_MAX_TOKENS = 10
 TEMPERATURE = 0.3
 MAX_TOKENS  = 300   # LLM06:2026 Unbounded Consumption — caps per-call token spend
@@ -45,7 +45,17 @@ LLAMAGUARD_THRESHOLD  = 0.5
 #   - "new persona / identity / role"
 # ---------------------------------------------------------------------------
 
-INJECTION_PATTERNS: list[str] = []   # TODO: add regex strings
+INJECTION_PATTERNS: list[str] = [
+    r"ignore\s+(all\s+)?previous\s+instructions",
+    r"forget\s+everything",
+    r"\byou\s+are\s+now\b",
+    r"disregard\s+your\s+(system\s+)?prompt",
+    r"act\s+as\s+(if\s+you\s+(are|were)|a\s+(\w+\s+)+with\s+no)",
+    r"roleplay\s+as",
+    r"pretend\s+(to\s+be|you\s+(are|were))",
+    r"(reveal|tell|show|print|display)\s+(me\s+)?(your\s+)?(full\s+)?(system\s+prompt|instructions|prompt)",
+    r"new\s+(persona|identity|role)\b",
+]
 
 # ---------------------------------------------------------------------------
 # PII_PATTERNS — regex strings to catch Aadhaar or PAN numbers typed by
@@ -56,7 +66,10 @@ INJECTION_PATTERNS: list[str] = []   # TODO: add regex strings
 #   - PAN:     5 uppercase letters + 4 digits + 1 uppercase letter (e.g. "ABCDE1234F")
 # ---------------------------------------------------------------------------
 
-PII_PATTERNS: list[str] = []   # TODO: add regex strings
+PII_PATTERNS: list[str] = [
+    r"\b\d{4}\s?\d{4}\s?\d{4}\b",   # Aadhaar: 12 digits (spaces optional)
+    r"\b[A-Z]{5}\d{4}[A-Z]\b",       # PAN:  ABCDE1234F
+]
 
 # Canned responses for blocked messages — provided, no changes needed.
 GUARD_BLOCKED_RESPONSE = (
@@ -130,17 +143,10 @@ POLICY       : A question about BNB's policies, fees, eligibility rules, require
 COMPLEX      : A question requiring product comparison, personal eligibility assessment,
                financial planning advice, or a recommendation across multiple options.
                Examples: "Should I take a home loan or use my savings?",
-               "Should I use a BNB home loan or use my savings to buy a flat?",
-               "Is it better to take a loan or pay cash?",
                "How much loan can I get on my salary of Rs. 80,000?"
 
 OUT_OF_SCOPE : A request unrelated to BNB banking products and services.
                Examples: "Write me a poem", "What is the stock market doing today?"
-
-DISAMBIGUATION RULE: If the query contains "should I", "is it better", "which is better",
-"would you recommend", or asks the customer to choose between options — always classify
-as COMPLEX, even if BNB products are mentioned. Mentioning a BNB product does not make
-a personal advice question a RATES or POLICY query.
 
 If the message is a short follow-up (e.g. "and what about X?", "what about Y"),
 classify it the same way you would classify a fresh question about that same topic --
